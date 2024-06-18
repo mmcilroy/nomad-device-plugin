@@ -5,12 +5,10 @@ package device
 
 import (
 	"context"
+	"fmt"
 	"time"
 
-	"github.com/hashicorp/nomad/helper/pointer"
-	"github.com/hashicorp/nomad/helper/uuid"
 	"github.com/hashicorp/nomad/plugins/device"
-	"github.com/hashicorp/nomad/plugins/shared/structs"
 )
 
 // doFingerprint is the long-running goroutine that detects device changes
@@ -37,8 +35,9 @@ func (d *SkeletonDevicePlugin) doFingerprint(ctx context.Context, devices chan *
 // plugin implementations will likely have a native struct provided by the corresonding SDK
 type fingerprintedDevice struct {
 	ID         string
-	deviceName string
 	PCIBusID   string
+	deviceName string
+	core       int
 }
 
 // writeFingerprintToChannel collects fingerprint info, partitions devices into
@@ -59,17 +58,15 @@ func (d *SkeletonDevicePlugin) writeFingerprintToChannel(devices chan<- *device.
 		defer d.deviceLock.Unlock()
 
 		// "discover" some devices
-		discoveredDevices := []*fingerprintedDevice{
-			{
-				ID:         uuid.Generate(),
-				deviceName: "modelA",
-				PCIBusID:   uuid.Generate(),
-			},
-			{
-				ID:         uuid.Generate(),
-				deviceName: "modelB",
-				PCIBusID:   uuid.Generate(),
-			},
+		discoveredDevices := []*fingerprintedDevice{}
+
+		for i := 0; i < 16; i++ {
+			discoveredDevices = append(discoveredDevices, &fingerprintedDevice{
+				ID: fmt.Sprintf("core%d", i),
+				//PCIBusID:   uuid.Generate(),
+				deviceName: "core", //fmt.Sprintf("core%d", i),
+				core:       i,
+			})
 		}
 
 		// during fingerprinting, devices are grouped by "device group" in
@@ -82,6 +79,7 @@ func (d *SkeletonDevicePlugin) writeFingerprintToChannel(devices chan<- *device.
 			deviceName := device.deviceName
 			deviceListByDeviceName[deviceName] = append(deviceListByDeviceName[deviceName], device)
 			d.devices[device.ID] = deviceName
+			d.cores[device.ID] = device.core
 		}
 
 		// Build Fingerprint response with computed groups and send it over the channel
@@ -120,16 +118,22 @@ func deviceGroupFromFingerprintData(groupName string, deviceList []*fingerprinte
 		// attributes like amount of memory, power, bar1memory, etc.
 		// If not, then they'll need to be split into different device groups
 		// with different names.
-		Attributes: map[string]*structs.Attribute{
-			"attrA": {
-				Int:  pointer.Of(int64(1024)),
-				Unit: "MB",
+		/*
+			Attributes: map[string]*structs.Attribute{
+				"attrA": {
+					Int:  pointer.Of(int64(1024)),
+					Unit: "MB",
+				},
+				"attrB": {
+					Float: pointer.Of(10.5),
+					Unit:  "MW",
+				},
+				"attrC": {
+					Float: pointer.Of(10.5),
+					Unit:  "MW",
+				},
 			},
-			"attrB": {
-				Float: pointer.Of(10.5),
-				Unit:  "MW",
-			},
-		},
+		*/
 	}
 	return deviceGroup
 }

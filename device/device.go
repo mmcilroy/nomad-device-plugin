@@ -32,10 +32,10 @@ const (
 	// vendor is the label for the vendor providing the devices.
 	// along with "type" and "model", this can be used when requesting devices:
 	//   https://www.nomadproject.io/docs/job-specification/device.html#name
-	vendor = "hashicorp"
+	vendor = "lcp"
 
 	// deviceType is the "type" of device being returned
-	deviceType = "skeleton"
+	deviceType = "cpu"
 )
 
 var (
@@ -58,7 +58,7 @@ var (
 			hclspec.NewAttr("some_optional_string_with_default", "string", false),
 			hclspec.NewLiteral("\"note the escaped quotes here\""),
 		),
-		"some_required_boolean": hclspec.NewAttr("some_required_boolean", "bool", true),
+		"some_required_boolean": hclspec.NewAttr("some_required_boolean", "bool", false),
 		"some_optional_list":    hclspec.NewAttr("some_optional_list", "list(number)", false),
 		"fingerprint_period": hclspec.NewDefault(
 			hclspec.NewAttr("fingerprint_period", "string", false),
@@ -94,6 +94,7 @@ type SkeletonDevicePlugin struct {
 	// discovered during fingerprinting.
 	// we'll save the "device name"/"model"
 	devices    map[string]string
+	cores      map[string]int
 	deviceLock sync.RWMutex
 }
 
@@ -102,9 +103,11 @@ type SkeletonDevicePlugin struct {
 // Plugin configuration isn't available yet, so there will typically be
 // a limit to the initialization that can be performed at this point.
 func NewPlugin(log log.Logger) *SkeletonDevicePlugin {
+	log.Debug("NewPlugin")
 	return &SkeletonDevicePlugin{
 		logger:  log.Named(pluginName),
 		devices: make(map[string]string),
+		cores:   make(map[string]int),
 	}
 }
 
@@ -113,6 +116,7 @@ func NewPlugin(log log.Logger) *SkeletonDevicePlugin {
 // This is called during Nomad client startup, while discovering and loading
 // plugins.
 func (d *SkeletonDevicePlugin) PluginInfo() (*base.PluginInfoResponse, error) {
+	d.logger.Debug("PluginInfo")
 	return pluginInfo, nil
 }
 
@@ -121,11 +125,13 @@ func (d *SkeletonDevicePlugin) PluginInfo() (*base.PluginInfoResponse, error) {
 // This is called during Nomad client startup, immediately before parsing
 // plugin config and calling SetConfig
 func (d *SkeletonDevicePlugin) ConfigSchema() (*hclspec.Spec, error) {
+	d.logger.Debug("ConfigSchema")
 	return configSpec, nil
 }
 
 // SetConfig is called by the client to pass the configuration for the plugin.
 func (d *SkeletonDevicePlugin) SetConfig(c *base.Config) error {
+	d.logger.Debug("SetConfig")
 
 	// decode the plugin config
 	var config Config
@@ -160,6 +166,8 @@ func (d *SkeletonDevicePlugin) SetConfig(c *base.Config) error {
 // Messages should be emitted to the returned channel when there are changes
 // to the devices or their health.
 func (d *SkeletonDevicePlugin) Fingerprint(ctx context.Context) (<-chan *device.FingerprintResponse, error) {
+	d.logger.Debug("Fingerprint")
+
 	// Fingerprint returns a channel. The recommended way of organizing a plugin
 	// is to pass that into a long-running goroutine and return the channel immediately.
 	outCh := make(chan *device.FingerprintResponse)
@@ -173,6 +181,7 @@ func (d *SkeletonDevicePlugin) Stats(ctx context.Context, interval time.Duration
 	// Similar to Fingerprint, Stats returns a channel. The recommended way of
 	// organizing a plugin is to pass that into a long-running goroutine and
 	// return the channel immediately.
+	d.logger.Debug("Stats")
 	outCh := make(chan *device.StatsResponse)
 	go d.doStats(ctx, outCh, interval)
 	return outCh, nil
@@ -190,6 +199,11 @@ func (e *reservationError) Error() string {
 // It may also perform any device-specific orchestration necessary to prepare the device
 // for use. This is called in a pre-start hook on the client, before starting the workload.
 func (d *SkeletonDevicePlugin) Reserve(deviceIDs []string) (*device.ContainerReservation, error) {
+	d.logger.Debug("Reserve")
+	for i := 0; i < len(deviceIDs); i++ {
+		d.logger.Debug(deviceIDs[i])
+	}
+
 	if len(deviceIDs) == 0 {
 		return &device.ContainerReservation{}, nil
 	}
@@ -218,31 +232,39 @@ func (d *SkeletonDevicePlugin) Reserve(deviceIDs []string) (*device.ContainerRes
 
 	// Mounts are used to mount host volumes into a container that may include
 	// libraries, etc.
-	resp.Mounts = append(resp.Mounts, &device.Mount{
-		TaskPath: "/usr/lib/libsome-library.so",
-		HostPath: "/usr/lib/libprobably-some-fingerprinted-or-configured-library.so",
-		ReadOnly: true,
-	})
+	/*
+		resp.Mounts = append(resp.Mounts, &device.Mount{
+			TaskPath: "/usr/lib/libsome-library.so",
+			HostPath: "/usr/lib/libprobably-some-fingerprinted-or-configured-library.so",
+			ReadOnly: true,
+		})
+	*/
 
-	for i, id := range deviceIDs {
+	var sb strings.Builder
+	for _, id := range deviceIDs {
 		// Check if the device is known
 		if _, ok := d.devices[id]; !ok {
 			return nil, status.Newf(codes.InvalidArgument, "unknown device %q", id).Err()
 		}
 
 		// Envs are a set of environment variables to set for the task.
-		resp.Envs[fmt.Sprintf("DEVICE_%d", i)] = id
+		//resp.Envs[fmt.Sprintf("DEVICE_%d", i)] = id
+		sb.WriteString(fmt.Sprintf("%d ", d.cores[id]))
 
 		// Devices are the set of devices to mount into the container.
-		resp.Devices = append(resp.Devices, &device.DeviceSpec{
-			// TaskPath is the location to mount the device in the task's file system.
-			TaskPath: fmt.Sprintf("/dev/skel%d", i),
-			// HostPath is the host location of the device.
-			HostPath: fmt.Sprintf("/dev/devActual"),
-			// CgroupPerms defines the permissions to use when mounting the device.
-			CgroupPerms: "rx",
-		})
+		/*
+			resp.Devices = append(resp.Devices, &device.DeviceSpec{
+				// TaskPath is the location to mount the device in the task's file system.
+				TaskPath: fmt.Sprintf("/dev/skel%d", i),
+				// HostPath is the host location of the device.
+				HostPath: fmt.Sprintf("/dev/devActual"),
+				// CgroupPerms defines the permissions to use when mounting the device.
+				CgroupPerms: "rx",
+			})
+		*/
 	}
+
+	resp.Envs[fmt.Sprintf("LCP_CPU_CORES_RESERVED")] = strings.TrimSpace(sb.String())
 
 	return resp, nil
 }

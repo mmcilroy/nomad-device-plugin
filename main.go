@@ -4,11 +4,26 @@
 package main
 
 import (
+	"fmt"
+	"os/exec"
+
 	log "github.com/hashicorp/go-hclog"
 	"github.com/hashicorp/nomad/plugins"
-
-	"github.com/hashicorp/nomad-skeleton-device-plugin/device"
+	"github.com/mmcilroy/nomad-device-plugin/device"
 )
+
+func readTopology() {
+	cmd := exec.Command("lstopo", "--of", "console", "--no-caches", "--no-smt")
+	stdout, err := cmd.Output()
+
+	if err != nil {
+		fmt.Println(err.Error())
+		return
+	}
+
+	// Print the output
+	fmt.Println(string(stdout))
+}
 
 func main() {
 	// Serve the plugin
@@ -17,5 +32,6 @@ func main() {
 
 // factory returns a new instance of our example device plugin
 func factory(log log.Logger) interface{} {
+	log.Debug("factory")
 	return device.NewPlugin(log)
 }

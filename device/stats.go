@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/hashicorp/nomad/plugins/device"
-	"github.com/hashicorp/nomad/plugins/shared/structs"
 )
 
 // doStats is the long running goroutine that streams device statistics
@@ -92,25 +91,31 @@ func statsForGroup(groupName string, groupStats []*deviceStats, timestamp time.T
 	instanceStats := make(map[string]*device.DeviceStats)
 
 	for _, statsItem := range groupStats {
-		memStat := &structs.StatValue{
-			IntNumeratorVal: &statsItem.usedMemory,
-			Unit:            "MiB",
-			Desc:            "Memory in use by the device",
-		}
 
-		instanceStats[statsItem.ID] = &device.DeviceStats{
-			// Summary exposes a single summary metric that should be the most
-			// informative to users.
-			Summary: memStat,
-			// Stats contains the verbose statistics for the device.
-			Stats: &structs.StatObject{
-				Attributes: map[string]*structs.StatValue{
-					"Used Memory": memStat,
+		instanceStats[statsItem.ID] = &device.DeviceStats{}
+
+		/*
+			memStat := &structs.StatValue{
+				IntNumeratorVal: &statsItem.usedMemory,
+				Unit:            "MiB",
+				Desc:            "Memory in use by the device",
+			}
+
+
+			instanceStats[statsItem.ID] = &device.DeviceStats{
+				// Summary exposes a single summary metric that should be the most
+				// informative to users.
+				Summary: memStat,
+				// Stats contains the verbose statistics for the device.
+				Stats: &structs.StatObject{
+					Attributes: map[string]*structs.StatValue{
+						"Used Memory": memStat,
+					},
 				},
-			},
-			// Timestamp is the time the statistics were collected.
-			Timestamp: timestamp,
-		}
+				// Timestamp is the time the statistics were collected.
+				Timestamp: timestamp,
+			}
+		*/
 	}
 
 	return &device.DeviceGroupStats{
