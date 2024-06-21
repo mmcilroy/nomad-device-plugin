@@ -62,9 +62,8 @@ func (d *SkeletonDevicePlugin) writeFingerprintToChannel(devices chan<- *device.
 
 		for i := 0; i < 16; i++ {
 			discoveredDevices = append(discoveredDevices, &fingerprintedDevice{
-				ID: fmt.Sprintf("core%d", i),
-				//PCIBusID:   uuid.Generate(),
-				deviceName: "core", //fmt.Sprintf("core%d", i),
+				ID:         fmt.Sprintf("core-%d", i),
+				deviceName: fmt.Sprintf("numa-%d", i/8),
 				core:       i,
 			})
 		}
@@ -103,9 +102,6 @@ func deviceGroupFromFingerprintData(groupName string, deviceList []*fingerprinte
 		devices = append(devices, &device.Device{
 			ID:      dev.ID,
 			Healthy: true,
-			HwLocality: &device.DeviceLocality{
-				PciBusID: dev.PCIBusID,
-			},
 		})
 	}
 
@@ -114,6 +110,7 @@ func deviceGroupFromFingerprintData(groupName string, deviceList []*fingerprinte
 		Type:    deviceType,
 		Name:    groupName,
 		Devices: devices,
+
 		// The device API assumes that devices with the same DeviceName have the same
 		// attributes like amount of memory, power, bar1memory, etc.
 		// If not, then they'll need to be split into different device groups

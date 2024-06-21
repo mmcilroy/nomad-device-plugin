@@ -32,7 +32,7 @@ const (
 	// vendor is the label for the vendor providing the devices.
 	// along with "type" and "model", this can be used when requesting devices:
 	//   https://www.nomadproject.io/docs/job-specification/device.html#name
-	vendor = "lcp"
+	vendor = "vendor"
 
 	// deviceType is the "type" of device being returned
 	deviceType = "cpu"
